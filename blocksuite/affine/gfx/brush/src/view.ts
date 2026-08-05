@@ -13,6 +13,7 @@ import {
   HighlighterDomRendererExtension,
   HighlighterElementRendererExtension,
 } from './renderer';
+import { SmartToolSwitcher } from './smart-tool-switcher';
 import {
   brushToolbarExtension,
   highlighterToolbarExtension,
@@ -33,6 +34,10 @@ export class BrushViewExtension extends ViewExtensionProvider {
     context.register(BrushTool);
     context.register(EraserTool);
     context.register(HighlighterTool);
+
+    if (this.isEdgeless(context.scope)) {
+      context.register(SmartToolSwitcher);
+    }
 
     context.register(BrushElementRendererExtension);
     context.register(BrushDomRendererExtension);

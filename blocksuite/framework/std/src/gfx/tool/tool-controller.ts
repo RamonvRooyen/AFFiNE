@@ -82,8 +82,41 @@ type AreaBound = IBound & {
   endY: number;
 };
 
-export class ToolController extends GfxExtension {
+export class ToolController extends GfxExtension implements ToolEventTarget {
   static override key = 'ToolController';
+
+  private readonly _hooks: Record<
+    string,
+    ((
+      evtState: PointerEventState | BuiltInSlotContext
+    ) => undefined | boolean)[]
+  > = {};
+
+  /**
+   * Hook into the event lifecycle.
+   * All hooks will be executed despite the current active tool.
+   * This is useful for tools that need to perform some action before an event is handled.
+   *
+   * Available as soon as the controller is constructed, so callers do not have to
+   * care whether it has been mounted yet.
+   *
+   * Return false from the handler to prevent the tool from handling the event.
+   */
+  readonly addHook: ToolEventTarget['addHook'] = (evtName, handler) => {
+    const hooks = (this._hooks[evtName] = this._hooks[evtName] ?? []);
+    const wrapped = handler as (
+      evtState: PointerEventState | BuiltInSlotContext
+    ) => undefined | boolean;
+
+    hooks.push(wrapped);
+
+    return () => {
+      const idx = hooks.indexOf(wrapped);
+      if (idx !== -1) {
+        hooks.splice(idx, 1);
+      }
+    };
+  };
 
   private readonly _builtInHookSlot = new Subject<BuiltInSlotContext>();
 
@@ -254,12 +287,7 @@ export class ToolController extends GfxExtension {
   }
 
   private _initializeEvents() {
-    const hooks: Record<
-      string,
-      ((
-        evtState: PointerEventState | BuiltInSlotContext
-      ) => undefined | boolean)[]
-    > = {};
+    const hooks = this._hooks;
     /**
      * Invoke the hook and the tool handler.
      * @returns false if the handler is prevented by the hook
@@ -292,33 +320,6 @@ export class ToolController extends GfxExtension {
           }
         );
       }
-    };
-
-    /**
-     * Hook into the event lifecycle.
-     * All hooks will be executed despite the current active tool.
-     * This is useful for tools that need to perform some action before an event is handled.
-     * @param evtName
-     * @param handler
-     */
-    const addHook: ToolEventTarget['addHook'] = (evtName, handler) => {
-      hooks[evtName] = hooks[evtName] ?? [];
-      hooks[evtName].push(
-        handler as (
-          evtState: PointerEventState | BuiltInSlotContext
-        ) => undefined | boolean
-      );
-
-      return () => {
-        const idx = hooks[evtName].indexOf(
-          handler as (
-            evtState: PointerEventState | BuiltInSlotContext
-          ) => undefined | boolean
-        );
-        if (idx !== -1) {
-          hooks[evtName].splice(idx, 1);
-        }
-      };
     };
 
     let dragContext: {
@@ -532,10 +533,6 @@ export class ToolController extends GfxExtension {
     this._builtInHookSlot.subscribe(evt => {
       hooks[evt.event]?.forEach(hook => hook(evt));
     });
-
-    return {
-      addHook,
-    };
   }
 
   private _register(tools: BaseTool) {
@@ -559,10 +556,10 @@ export class ToolController extends GfxExtension {
   };
 
   override mounted(): void {
-    const { addHook } = this._initializeEvents();
+    this._initializeEvents();
 
     const eventTarget: ToolEventTarget = {
-      addHook,
+      addHook: this.addHook,
     };
 
     this.std.provider.getAll(ToolIdentifier).forEach(tool => {
