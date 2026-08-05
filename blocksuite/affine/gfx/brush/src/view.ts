@@ -35,7 +35,9 @@ export class BrushViewExtension extends ViewExtensionProvider {
     context.register(EraserTool);
     context.register(HighlighterTool);
 
-    context.register(SmartToolSwitcher);
+    if (this.isEdgeless(context.scope)) {
+      context.register(SmartToolSwitcher);
+    }
 
     context.register(BrushElementRendererExtension);
     context.register(BrushDomRendererExtension);
